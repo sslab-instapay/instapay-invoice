@@ -452,49 +452,6 @@ function encode (inputData, addDefaults) {
     throw new Error('Need timestamp for proper payment request reconstruction')
   }
 
-  if (data.tags === undefined) throw new Error('Payment Requests need tags array')
-
-  // If no payment hash, fail
-  // if (!tagsContainItem(data.tags, TAGNAMES['1'])) {
-  //   throw new Error('Lightning Payment Request needs a payment hash')
-  // }
-  // If no description or purpose commit hash/message, fail
-  if (!tagsContainItem(data.tags, TAGNAMES['13']) && !tagsContainItem(data.tags, TAGNAMES['23'])) {
-    if (addDefaults) {
-      data.tags.push({
-        tagName: TAGNAMES['13'],
-        data: DEFAULTDESCRIPTION
-      })
-    } else {
-      throw new Error('Payment request requires description or purpose commit hash')
-    }
-  }
-
-  // If a description exists, check to make sure the buffer isn't greater than
-  // 639 bytes long, since 639 * 8 / 5 = 1023 words (5 bit) when padded
-  if (tagsContainItem(data.tags, TAGNAMES['13']) &&
-      Buffer.from(tagsItems(data.tags, TAGNAMES['13']), 'utf8').length > 639) {
-    throw new Error('Description is too long: Max length 639 bytes')
-  }
-
-  // if there's no expire time, and it is not reconstructing (must have private key)
-  // default to adding a 3600 second expire time (1 hour)
-  if (!tagsContainItem(data.tags, TAGNAMES['6']) && !canReconstruct && addDefaults) {
-    data.tags.push({
-      tagName: TAGNAMES['6'],
-      data: DEFAULTEXPIRETIME
-    })
-  }
-
-  // if there's no minimum cltv time, and it is not reconstructing (must have private key)
-  // default to adding a 9 block minimum cltv time (90 minutes for bitcoin)
-  if (!tagsContainItem(data.tags, TAGNAMES['24']) && !canReconstruct && addDefaults) {
-    data.tags.push({
-      tagName: TAGNAMES['24'],
-      data: DEFAULTCLTVEXPIRY
-    })
-  }
-
   let nodePublicKey, tagNodePublicKey
   // If there is a payee_node_key tag convert to buffer
   if (tagsContainItem(data.tags, TAGNAMES['19'])) tagNodePublicKey = hexToBuffer(tagsItems(data.tags, TAGNAMES['19']))
@@ -508,88 +465,8 @@ function encode (inputData, addDefaults) {
   if (nodePublicKey) data.payeeNodeKey = nodePublicKey.toString('hex')
 
   let code, addressHash, address
-  // If there is a fallback address tag we must check it is valid
-  if (tagsContainItem(data.tags, TAGNAMES['9'])) {
-    let addrData = tagsItems(data.tags, TAGNAMES['9'])
-    // Most people will just provide address so Hash and code will be undefined here
-    address = addrData.address
-    addressHash = addrData.addressHash
-    code = addrData.code
-
-    if (addressHash === undefined || code === undefined) {
-      let bech32addr, base58addr
-      try {
-        bech32addr = bitcoinjsAddress.fromBech32(address)
-        addressHash = bech32addr.data
-        code = bech32addr.version
-      } catch (e) {
-        try {
-          base58addr = bitcoinjsAddress.fromBase58Check(address)
-          if (base58addr.version === coinTypeObj.pubKeyHash) {
-            code = 17
-          } else if (base58addr.version === coinTypeObj.scriptHash) {
-            code = 18
-          }
-          addressHash = base58addr.hash
-        } catch (f) {
-          throw new Error('Fallback address type is unknown')
-        }
-      }
-      if (bech32addr && !(bech32addr.version in VALIDWITNESSVERSIONS)) {
-        throw new Error('Fallback address witness version is unknown')
-      }
-      if (bech32addr && bech32addr.prefix !== coinTypeObj.bech32) {
-        throw new Error('Fallback address network type does not match payment request network type')
-      }
-      if (base58addr && base58addr.version !== coinTypeObj.pubKeyHash &&
-          base58addr.version !== coinTypeObj.scriptHash) {
-        throw new Error('Fallback address version (base58) is unknown or the network type is incorrect')
-      }
-
-      // FIXME: If addressHash or code is missing, add them to the original Object
-      // after parsing the address value... this changes the actual attributes of the data object.
-      // Not very clean.
-      // Without this, a person can not specify a fallback address tag with only the address key.
-      addrData.addressHash = addressHash.toString('hex')
-      addrData.code = code
-    }
-  }
-
-  // If there is route info tag, check that each route has all 4 necessary info
-  if (tagsContainItem(data.tags, TAGNAMES['3'])) {
-    let routingInfo = tagsItems(data.tags, TAGNAMES['3'])
-    routingInfo.forEach(route => {
-      if (route.pubkey === undefined ||
-        route.short_channel_id === undefined ||
-        route.fee_base_msat === undefined ||
-        route.fee_proportional_millionths === undefined ||
-        route.cltv_expiry_delta === undefined) {
-        throw new Error('Routing info is incomplete')
-      }
-      if (!secp256k1.publicKeyVerify(hexToBuffer(route.pubkey))) {
-        throw new Error('Routing info pubkey is not a valid pubkey')
-      }
-      let shortId = hexToBuffer(route.short_channel_id)
-      if (!(shortId instanceof Buffer) || shortId.length !== 8) {
-        throw new Error('Routing info short channel id must be 8 bytes')
-      }
-      if (typeof route.fee_base_msat !== 'number' ||
-        Math.floor(route.fee_base_msat) !== route.fee_base_msat) {
-        throw new Error('Routing info fee base msat is not an integer')
-      }
-      if (typeof route.fee_proportional_millionths !== 'number' ||
-        Math.floor(route.fee_proportional_millionths) !== route.fee_proportional_millionths) {
-        throw new Error('Routing info fee proportional millionths is not an integer')
-      }
-      if (typeof route.cltv_expiry_delta !== 'number' ||
-        Math.floor(route.cltv_expiry_delta) !== route.cltv_expiry_delta) {
-        throw new Error('Routing info cltv expiry delta is not an integer')
-      }
-    })
-  }
 
   let prefix = 'insta'
-  prefix += coinTypeObj.bech32
 
   let hrpString
   // calculate the smallest possible integer (removing zeroes) and add the best
@@ -699,7 +576,7 @@ function encode (inputData, addDefaults) {
 // decode will only have extra comments that aren't covered in encode comments.
 // also if anything is hard to read I'll comment.
 function decode (paymentRequest) {
-  if (typeof paymentRequest !== 'string') throw new Error('Lightning Payment Request must be string')
+  if (typeof paymentRequest !== 'string') throw new Error('Instapay Payment Request must be string')
   if (paymentRequest.slice(0, 5).toLowerCase() !== 'insta') throw new Error('Not a proper instapay payment request')
   let decoded = bech32.decode(paymentRequest, Number.MAX_SAFE_INTEGER)
   paymentRequest = paymentRequest.toLowerCase()
@@ -732,15 +609,6 @@ function decode (paymentRequest) {
   if (!prefixMatches) {
     throw new Error('Not a proper Instapay payment request')
   }
-
-  let coinType = prefixMatches[1]
-  let coinNetwork
-  // if (BECH32CODES[coinType]) {
-  //   coinType = BECH32CODES[coinType]
-  //   coinNetwork = BITCOINJS_NETWORK_INFO[coinType]
-  // } else {
-  //   throw new Error('Unknown coin bech32 prefix')
-  // }
 
   let value = prefixMatches[2]
   let satoshis, millisatoshis, removeSatoshis
@@ -778,12 +646,6 @@ function decode (paymentRequest) {
 
     tagWords = words.slice(0, tagLength)
     words = words.slice(tagLength)
-
-    // See: parsers for more comments
-    tags.push({
-      tagName,
-      data: parser(tagWords, coinNetwork) // only fallback address needs coinNetwork
-    })
   }
 
   let timeExpireDate, timeExpireDateString
@@ -806,7 +668,6 @@ function decode (paymentRequest) {
     complete: true,
     prefix,
     wordsTemp: bech32.encode('temp', wordsNoSig.concat(sigWords), Number.MAX_SAFE_INTEGER),
-    coinType,
     satoshis,
     millisatoshis,
     timestamp,
