@@ -34,6 +34,8 @@ const DIVISORS = {
   m: new BN(1e3, 10),
   u: new BN(1e6, 10),
   n: new BN(1e9, 10),
+  dlvk
+
   p: new BN(1e12, 10)
 }
 
@@ -53,7 +55,6 @@ const TAGCODES = {
   expire_time: 6, // default: 3600 (1 hour)
   min_final_cltv_expiry: 24, // default: 9
   fallback_address: 9,
-  routing_info: 3 // for extra routing info (private etc.)
 }
 
 // reverse the keys and values of TAGCODES and insert into TAGNAMES
@@ -382,9 +383,9 @@ function sign (inputPayReqObj, inputPrivateKey) {
     nodePublicKey = hexToBuffer(payReqObj.payeeNodeKey)
   }
   // If they are not equal throw an error
-  if (nodePublicKey && tagNodePublicKey && !tagNodePublicKey.equals(nodePublicKey)) {
-    throw new Error('payee node key tag and payeeNodeKey attribute must match')
-  }
+  // if (nodePublicKey && tagNodePublicKey && !tagNodePublicKey.equals(nodePublicKey)) {
+  //   throw new Error('payee node key tag and payeeNodeKey attribute must match')
+  // }
 
   // make sure if either exist they are in nodePublicKey
   nodePublicKey = tagNodePublicKey || nodePublicKey
@@ -659,9 +660,9 @@ function decode (paymentRequest) {
   let toSign = Buffer.concat([Buffer.from(prefix, 'utf8'), Buffer.from(convert(wordsNoSig, 5, 8))])
   let payReqHash = sha256(toSign)
   let sigPubkey = secp256k1.recover(payReqHash, sigBuffer, recoveryFlag, true)
-  if (tagsContainItem(tags, TAGNAMES['19']) && tagsItems(tags, TAGNAMES['19']) !== sigPubkey.toString('hex')) {
-    throw new Error('Lightning Payment Request signature pubkey does not match payee pubkey')
-  }
+  // if (tagsContainItem(tags, TAGNAMES['19']) && tagsItems(tags, TAGNAMES['19']) !== sigPubkey.toString('hex')) {
+  //   throw new Error('Instapay Payment Request signature pubkey does not match payee pubkey')
+  // }
 
   let finalResult = {
     paymentRequest,
