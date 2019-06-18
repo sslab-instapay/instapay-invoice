@@ -48,13 +48,9 @@ const MILLISATS_PER_NANOBTC = new BN(1e2, 10)
 const PICOBTC_PER_MILLISATS = new BN(10, 10)
 
 const TAGCODES = {
-  payment_hash: 1,
   description: 13,
   payee_node_key: 19,
-  purpose_commit_hash: 23, // commit to longer descriptions (like a website)
   expire_time: 6, // default: 3600 (1 hour)
-  min_final_cltv_expiry: 24, // default: 9
-  fallback_address: 9,
 }
 
 // reverse the keys and values of TAGCODES and insert into TAGNAMES
@@ -77,14 +73,9 @@ const TAGENCODERS = {
 }
 
 const TAGPARSERS = {
-  '1': (words) => wordsToBuffer(words, true).toString('hex'), // 256 bits
   '13': (words) => wordsToBuffer(words, true).toString('utf8'), // string variable length
   '19': (words) => wordsToBuffer(words, true).toString('hex'), // 264 bits
-  '23': (words) => wordsToBuffer(words, true).toString('hex'), // 256 bits
   '6': wordsToIntBE, // default: 3600 (1 hour)
-  '24': wordsToIntBE, // default: 9
-  '9': fallbackAddressParser,
-  '3': routingInfoParser // for extra routing info (private etc.)
 }
 
 const unknownTagName = 'unknownTag'
@@ -538,14 +529,7 @@ function encode (inputData, addDefaults) {
   // Then convert to 5 bit words with right padding 0 bits.
   let sigWords
   if (canReconstruct) {
-    /* Since BOLT11 does not require a payee_node_key tag in the specs,
-    most parsers will have to recover the pubkey from the signature
-    To ensure the tag data has been provided in the right order etc.
-    we should check that the data we got and the node key given match when
-    reconstructing a payment request from given signature and recoveryID.
-    However, if a privatekey is given, the caller is the privkey owner.
-    Earlier we check if the private key matches the payee node key IF they
-    gave one. */
+
     if (nodePublicKey) {
       let recoveredPubkey = secp256k1.recover(payReqHash, Buffer.from(data.signature, 'hex'), data.recoveryFlag, true)
       if (nodePublicKey && !nodePublicKey.equals(recoveredPubkey)) {
