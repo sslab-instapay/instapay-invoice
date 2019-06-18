@@ -34,8 +34,6 @@ const DIVISORS = {
   m: new BN(1e3, 10),
   u: new BN(1e6, 10),
   n: new BN(1e9, 10),
-  dlvk
-
   p: new BN(1e12, 10)
 }
 
@@ -384,9 +382,9 @@ function sign (inputPayReqObj, inputPrivateKey) {
   let publicKey = secp256k1.publicKeyCreate(privateKey)
 
   // Check if pubkey matches for private key
-  if (nodePublicKey && !publicKey.equals(nodePublicKey)) {
-    throw new Error('The private key given is not the private key of the node public key given')
-  }
+  // if (nodePublicKey && !publicKey.equals(nodePublicKey)) {
+  //   throw new Error('The private key given is not the private key of the node public key given')
+  // }
 
   let words = bech32.decode(payReqObj.wordsTemp, Number.MAX_SAFE_INTEGER).words
 
@@ -568,6 +566,7 @@ function decode (paymentRequest) {
   let prefix = decoded.prefix
   let words = decoded.words
 
+  let coinNetwork = 'insta'
   // signature is always 104 words on the end
   // cutting off at the beginning helps since there's no way to tell
   // ahead of time how many tags there are.
@@ -589,16 +588,18 @@ function decode (paymentRequest) {
   // doesn't have anything, there's a good chance the last letter of the
   // coin type got captured by the third group, so just re-regex without
   // the number.
-  let prefixMatches = prefix.match(/^insta(\S+?)(\d*)([a-zA-Z]?)$/)
+  let prefixMatches = prefix.match(/^insta(\d*)([a-zA-Z]?)$/)
+  console.log(prefixMatches)
   if (prefixMatches && !prefixMatches[2]) prefixMatches = prefix.match(/^insta(\S+)$/)
   if (!prefixMatches) {
     throw new Error('Not a proper Instapay payment request')
   }
-
-  let value = prefixMatches[2]
+  console.log("--satoshi parsing start--")
+  let value = prefixMatches[1]
+  console.log("satoshies : " + value)
   let satoshis, millisatoshis, removeSatoshis
   if (value) {
-    let divisor = prefixMatches[3]
+    let divisor = prefixMatches[2]
     try {
       satoshis = parseInt(hrpToSat(value + divisor, true))
     } catch (e) {
@@ -616,6 +617,7 @@ function decode (paymentRequest) {
   let timestampString = new Date(timestamp * 1000).toISOString()
   words = words.slice(7) // trim off the left 7 words
 
+  console.log("--tag parsing start--")
   let tags = []
   let tagName, parser, tagLength, tagWords
   // we have no tag count to go on, so just keep hacking off words
@@ -631,6 +633,11 @@ function decode (paymentRequest) {
 
     tagWords = words.slice(0, tagLength)
     words = words.slice(tagLength)
+
+    tags.push({
+      tagName,
+      data: parser(tagWords, coinNetwork)
+    })
   }
 
   let timeExpireDate, timeExpireDateString
@@ -644,9 +651,6 @@ function decode (paymentRequest) {
   let toSign = Buffer.concat([Buffer.from(prefix, 'utf8'), Buffer.from(convert(wordsNoSig, 5, 8))])
   let payReqHash = sha256(toSign)
   let sigPubkey = secp256k1.recover(payReqHash, sigBuffer, recoveryFlag, true)
-  // if (tagsContainItem(tags, TAGNAMES['19']) && tagsItems(tags, TAGNAMES['19']) !== sigPubkey.toString('hex')) {
-  //   throw new Error('Instapay Payment Request signature pubkey does not match payee pubkey')
-  // }
 
   let finalResult = {
     paymentRequest,
@@ -663,9 +667,9 @@ function decode (paymentRequest) {
     tags
   }
 
-  if (removeSatoshis) {
-    delete finalResult['satoshis']
-  }
+  // if (removeSatoshis) {
+  //   delete finalResult['satoshis']
+  // }
 
   if (timeExpireDate) {
     finalResult = Object.assign(finalResult, {timeExpireDate, timeExpireDateString})
